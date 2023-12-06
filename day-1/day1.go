@@ -16,7 +16,7 @@ func main() {
 
 func calibration() {
 	sum := 0
-	file, err := os.Open("./input.txt")
+	file, err := os.Open("./day-1/input.txt")
 	if err != nil {
 		log.Fatal("Missing File")
 	}
