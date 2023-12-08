@@ -5,19 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"reflect"
+	"regexp"
 	"strconv"
-	"strings"
-	"unicode"
 )
-
-type NumberData struct {
-	value string
-	start int
-	end   int
-	valid bool
-	clear bool
-}
 
 func main() {
 	engine()
@@ -31,105 +21,68 @@ func engine() {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	sumID := getSchematicValues(scanner)
-	fmt.Println(sumID)
+	var data []string
+	for scanner.Scan() {
+		data = append(data, scanner.Text())
+	}
+	sum, pow := getSchematicValues(data)
+	fmt.Println(sum, pow)
 }
 
-func getSchematicValues(scanner *bufio.Scanner) int {
+func getSchematicValues(data []string) (int, int) {
+	totalSum := 0
+	totalPow := 0
+	symbolsPosition := make(map[[2]int][]int)
+	for i, line := range data {
+		getSymbolsPositions(line, symbolsPosition, i)
+	}
+	for i, line := range data {
+		getTouchingNumbers(line, symbolsPosition, i)
+	}
+	for _, values := range symbolsPosition {
+		totalSum += getSum(values)
+		if len(values) == 2 {
+			totalPow += values[0] * values[1]
+		}
+	}
+	return totalSum, totalPow
+}
+
+func getSymbolsPositions(line string, symbolsMap map[[2]int][]int, row int) {
+	r := regexp.MustCompile("[^\\d.]")
+	foundIndex := r.FindAllStringIndex(line, -1) // n is the limit of match (-1 no limit)
+	for _, pos := range foundIndex {
+		symbolsMap[[2]int{row, pos[0]}] = []int{}
+	}
+}
+
+func getTouchingNumbers(line string, symbolsMap map[[2]int][]int, row int) {
+	r := regexp.MustCompile("\\d+")
+	foundIndex := r.FindAllStringIndex(line, -1)
+numLoop:
+	for _, pos := range foundIndex {
+		colStart := pos[0] - 1
+		colEnd := pos[1]
+		rowStart := row - 1
+		rowEnd := row + 1
+		num, _ := strconv.Atoi(line[pos[0]:pos[1]])
+		for key := range symbolsMap {
+			keyRow := key[0]
+			keyCol := key[1]
+			if (keyCol >= colStart && keyCol <= colEnd) && (keyRow >= rowStart && keyRow <= rowEnd) {
+				prevValues := symbolsMap[[2]int{keyRow, keyCol}]
+				updatedValues := append(prevValues, num)
+				symbolsMap[[2]int{keyRow, keyCol}] = updatedValues
+				continue numLoop
+			}
+		}
+	}
+}
+
+func getSum(nums []int) int {
 	sum := 0
-	num := 0
-	pLine := ""
-	for scanner.Scan() {
-		pLine, num = getAdjacentNumbers(pLine, scanner.Text())
+	for _, num := range nums {
 		sum += num
 	}
 	return sum
-}
-
-func getAdjacentNumbers(pLine string, cLine string) (string, int) {
-	var numbers []NumberData
-	var validNumbers []int
-	var marksIndex []int
-	addingNumber := false
-	clearValue := false
-	numData := NumberData{
-		value: "",
-		start: 0,
-		end:   0,
-		valid: false,
-		clear: false,
-	}
-	line := ""
-	for i := 0; i < 2; i++ {
-		if i == 0 {
-			line = pLine
-		} else {
-			clearValue = true
-			line = cLine
-		}
-		for i, char := range line {
-			if unicode.IsDigit(char) {
-				if addingNumber == false {
-					clearStruct(&numData)
-					addingNumber = true
-					numData.start = i
-				}
-				numData.value += string(char)
-				if i+1 == len(line) {
-					numData.end = i - 1
-					numData.clear = clearValue
-					addingNumber = false
-					numbers = append(numbers, numData)
-				}
-			} else {
-				if addingNumber {
-					numData.end = i - 1
-					numData.clear = clearValue
-					addingNumber = false
-					numbers = append(numbers, numData)
-				}
-			}
-			if !unicode.IsDigit(char) && char != '.' {
-				marksIndex = append(marksIndex, i)
-			}
-		}
-	}
-
-	for _, mark := range marksIndex {
-		for i, number := range numbers {
-			if (number.start-1) <= mark && (number.end+1) >= mark && !number.valid {
-				numbers[i].valid = true
-				if number.clear {
-					cLine = replaceSubstring(cLine, number.start, number.end, strings.Repeat(".", len(number.value)))
-				}
-			}
-		}
-	}
-
-	sum := 0
-	for _, number := range numbers {
-		if !number.valid {
-			continue
-		}
-		num, err := strconv.Atoi(number.value)
-		validNumbers = append(validNumbers, num)
-		if err == nil {
-			sum += num
-		}
-	}
-	return cLine, sum
-}
-
-func clearStruct(v interface{}) {
-	p := reflect.ValueOf(v).Elem()
-	p.Set(reflect.Zero(p.Type()))
-}
-
-func replaceSubstring(original string, start, end int, newSubstring string) string {
-	var builder strings.Builder
-
-	builder.WriteString(original[:start])
-	builder.WriteString(newSubstring)
-	builder.WriteString(original[end+1:])
-	return builder.String()
 }
