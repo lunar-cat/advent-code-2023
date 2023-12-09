@@ -19,17 +19,29 @@ func scratchCards() {
 		log.Fatal("Missing File")
 	}
 	defer file.Close()
-
 	scanner := bufio.NewScanner(file)
+
 	winnerPoints := 0
+	cards := 0
+	i := 0
+	repeatMap := make(map[int]int)
 	for scanner.Scan() {
-		winnerPoints += getWinnerPoints(scanner.Text())
+		i++
+		repeatMap[i]++
+		p, c := getWinnerPoints(scanner.Text())
+		winnerPoints += p
+		countRepetitions(repeatMap, c, i)
 	}
-	fmt.Println(winnerPoints)
+
+	for _, v := range repeatMap {
+		cards += v
+	}
+	fmt.Println(winnerPoints, cards)
 }
 
-func getWinnerPoints(line string) int {
+func getWinnerPoints(line string) (int, int) {
 	points := 0
+	cards := 0
 	numbers := strings.Split(line, "|")
 	r := regexp.MustCompile(`\d+`)
 	winningNumbers := r.FindAllString(numbers[0], -1)[1:]
@@ -42,6 +54,7 @@ func getWinnerPoints(line string) int {
 
 	for _, numStr := range cardNumbers {
 		if winningNumbersMap[numStr] {
+			cards++
 			if points == 0 {
 				points += 1
 			} else {
@@ -49,5 +62,13 @@ func getWinnerPoints(line string) int {
 			}
 		}
 	}
-	return points
+	return points, cards
+}
+
+func countRepetitions(repeatMap map[int]int, cards int, currentCard int) {
+	for j := 0; j < repeatMap[currentCard]; j++ {
+		for m := 1; m <= cards; m++ {
+			repeatMap[currentCard+m]++
+		}
+	}
 }
