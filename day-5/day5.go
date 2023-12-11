@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const PartTwo = true
+
 func main() {
 	almanac()
 }
@@ -22,9 +24,10 @@ func almanac() {
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
 
-	var seeds []int
+	var seeds [][2]int
 	currentStage := -1
 	var stages [7]map[[2]int]int
+	r := regexp.MustCompile(`\d+`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -32,7 +35,7 @@ func almanac() {
 			continue
 		}
 		if strings.Contains(line, "seeds") {
-			seeds = getSeeds(line)
+			seeds = getSeeds(line, r)
 			continue
 		}
 		mapRanges(line, &stages, currentStage)
@@ -42,32 +45,40 @@ func almanac() {
 	fmt.Println(lowestLocation)
 }
 
-func getSeeds(line string) []int {
-	r := regexp.MustCompile(`\d+`)
+func getSeeds(line string, r *regexp.Regexp) [][2]int {
 	seeds := r.FindAllString(line, -1)
-	var mappedSeeds []int
-	for _, seed := range seeds {
-		numSeed, _ := strconv.Atoi(seed)
-		mappedSeeds = append(mappedSeeds, numSeed)
+	var mappedSeeds [][2]int
+
+	if !PartTwo {
+		for i := 0; i < len(seeds); i++ {
+			startSeed, _ := strconv.Atoi(seeds[i])
+			mappedSeeds = append(mappedSeeds, [2]int{startSeed, startSeed + 1})
+		}
+	} else {
+		for i := 0; i < len(seeds); i += 2 {
+			startSeed, _ := strconv.Atoi(seeds[i])
+			endSeed, _ := strconv.Atoi(seeds[i+1])
+			mappedSeeds = append(mappedSeeds, [2]int{startSeed, startSeed + endSeed})
+		}
 	}
 	return mappedSeeds
 }
 
 func selectStage(line string, currentStage int) int {
 	switch {
-	case strings.Contains(line, "seed-to-soil map"):
+	case strings.HasPrefix(line, "seed-to-soil"):
 		return 0
-	case strings.Contains(line, "soil-to-fertilizer map"):
+	case strings.HasPrefix(line, "soil-to-fertilizer"):
 		return 1
-	case strings.Contains(line, "fertilizer-to-water map"):
+	case strings.HasPrefix(line, "fertilizer-to-water"):
 		return 2
-	case strings.Contains(line, "water-to-light map"):
+	case strings.HasPrefix(line, "water-to-light"):
 		return 3
-	case strings.Contains(line, "light-to-temperature map"):
+	case strings.HasPrefix(line, "light-to-temperature"):
 		return 4
-	case strings.Contains(line, "temperature-to-humidity map"):
+	case strings.HasPrefix(line, "temperature-to-humidity"):
 		return 5
-	case strings.Contains(line, "humidity-to-location map"):
+	case strings.HasPrefix(line, "humidity-to-location"):
 		return 6
 	}
 	return currentStage
@@ -76,7 +87,7 @@ func selectStage(line string, currentStage int) int {
 func mapRanges(line string, stagesMaps *[7]map[[2]int]int, currentStage int) {
 	// destination - source - range (len)
 	// 50 	   98 	   -> length 2
-	// (98 - 98 + len - 1) : 50
+	// (98 - 98 + len) : 50
 	r := regexp.MustCompile(`\d+`)
 	nums := r.FindAllString(line, -1)
 	if len(nums) == 0 {
@@ -88,7 +99,7 @@ func mapRanges(line string, stagesMaps *[7]map[[2]int]int, currentStage int) {
 		mappedNums[i] = num
 	}
 	rangeMap := stagesMaps[currentStage]
-	k := [2]int{mappedNums[1], mappedNums[1] + (mappedNums[2] - 1)}
+	k := [2]int{mappedNums[1], mappedNums[1] + (mappedNums[2])}
 	v := mappedNums[0]
 	if rangeMap == nil {
 		rangeMap = map[[2]int]int{k: v}
@@ -98,29 +109,48 @@ func mapRanges(line string, stagesMaps *[7]map[[2]int]int, currentStage int) {
 	stagesMaps[currentStage] = rangeMap
 }
 
-func processSeeds(seeds []int, stagesMap [7]map[[2]int]int) int {
-	var locations []int
+func processSeeds(seeds [][2]int, stagesMap [7]map[[2]int]int) int {
+	var locations [][2]int
+	var newSeeds [][2]int
 
-	currentValue := 0
-	for _, seed := range seeds { // seed -> 79
-		currentValue = seed
-	nextStage:
-		for _, stage := range stagesMap { // stage -> {[1-10]: 12}
-			for k, v := range stage { // k -> [1-10] | v -> 12
-				if k[0] <= currentValue && currentValue <= k[1] {
-					currentValue = (currentValue - k[0]) + v
-					continue nextStage
+	for _, stage := range stagesMap {
+		newSeeds = [][2]int{}
+		for len(seeds) > 0 {
+			i := len(seeds) - 1
+			seedRange := seeds[i]
+			seeds = append(seeds[:i], seeds[i+1:]...)
+			found := false
+			for source, destination := range stage { // source [start, end] : destination
+				lowerIntersection := max(seedRange[0], source[0])
+				upperIntersection := min(seedRange[1], source[1])
+				if lowerIntersection < upperIntersection {
+					newSeeds = append(newSeeds, [2]int{ // diff -> source start - destination
+						lowerIntersection - source[0] + destination,
+						upperIntersection - source[0] + destination,
+					})
+					if seedRange[0] < lowerIntersection {
+						seeds = append(seeds, [2]int{seedRange[0], lowerIntersection})
+					}
+					if seedRange[1] > upperIntersection {
+						seeds = append(seeds, [2]int{upperIntersection, seedRange[1]})
+					}
+					found = true
 				}
 			}
+			if !found {
+				newSeeds = append(newSeeds, seedRange)
+			}
 		}
-		locations = append(locations, currentValue)
+		seeds = newSeeds
 	}
+	locations = seeds
+
 	lowestLocation := locations[0]
 
 	for _, location := range locations {
-		if location < lowestLocation {
+		if location[0] < lowestLocation[0] {
 			lowestLocation = location
 		}
 	}
-	return lowestLocation
+	return lowestLocation[0]
 }
