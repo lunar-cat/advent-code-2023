@@ -7,8 +7,11 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
+
+const PartTwo = true
 
 func main() {
 	start := time.Now()
@@ -40,7 +43,12 @@ func hauntedWasteland() {
 		}
 		listNodes(scanner.Text(), &nodes)
 	}
-	steps := traverseNodes(&nodes, startNode, endNode, directions)
+	steps := 0
+	if PartTwo {
+		steps = traverseParallelNodes(&nodes, directions)
+	} else {
+		steps = traverseNodes(&nodes, startNode, endNode, directions)
+	}
 	fmt.Println(steps)
 }
 
@@ -66,9 +74,61 @@ func traverseNodes(nodes *map[string][2]string, startNode string, endNode string
 		}
 
 		currentNode = (*nodes)[currentNode][direction]
-		if currentNode == endNode {
-			break
-		}
 	}
 	return steps
+}
+
+func traverseParallelNodes(nodes *map[string][2]string, directions string) int {
+	var currentNodes []string
+	for k := range *nodes {
+		if strings.HasSuffix(k, "A") {
+			currentNodes = append(currentNodes, k)
+		}
+	}
+	results := make([]int, len(currentNodes))
+	var wg sync.WaitGroup
+
+	for i, node := range currentNodes {
+		wg.Add(1)
+		go func(startNode string, index int) {
+			defer wg.Done()
+			steps := 0
+			direction := 0
+			currentNode := startNode
+			for !strings.HasSuffix(currentNode, "Z") {
+				nextMove := string(directions[(steps % len(directions))])
+				steps++
+				if nextMove == "R" {
+					direction = 1
+				} else {
+					direction = 0
+				}
+
+				currentNode = (*nodes)[currentNode][direction]
+			}
+			results[index] = steps
+		}(node, i)
+	}
+	wg.Wait()
+
+	return LCM(results...)
+}
+
+func GCD(a, b int) int {
+	for b != 0 {
+		t := b
+		b = a % b
+		a = t
+	}
+	return a
+}
+
+func LCM(integers ...int) int {
+	result := integers[0] * integers[1] / GCD(integers[0], integers[1])
+
+	for i := 2; i < len(integers); i++ {
+		result = LCM(result, integers[i])
+	}
+
+	return result
 }
